@@ -18,9 +18,8 @@ void buildNodes(int len) {
 }
 
 // Build a GJE adjacency list by populating the dependenices and children
-void buildGJE() {
-    // Length of Node Array is sum of all integers till the number of nodes in top most layer
-    int topLevel = ((int)sqrt(1 + (8 * nodeArrLen)) - 1) / 2;
+void buildGJE(int topLevel) {
+    buildNodes((topLevel * (topLevel + 1)) / 2);
     int prefix;
 
     for (int i = 0; i < topLevel; i++) {
@@ -63,6 +62,12 @@ void buildGJE() {
     }
 }
 
+void buildLU(int topLevel) {
+    buildNodes((topLevel * (topLevel + 3)) / 2);
+
+    // screw it I will write this later
+}
+
 void printDAG() {
     for (int i = 0; i < nodeArrLen; i++) {
         printf("Node %d:\nDeps:\n", nodeArr[i].index);
@@ -76,7 +81,5 @@ void printDAG() {
 }
 
 int main() {
-    buildNodes(10);
-    buildGJE();
-    printDAG();
+    return 0;
 }
