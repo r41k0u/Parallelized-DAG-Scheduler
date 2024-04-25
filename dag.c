@@ -68,6 +68,95 @@ void buildLU(int topLevel) {
     // screw it I will write this later
 }
 
+void initOcean() {
+    tempSeqGenerator = NULL;
+    ocean.whales = (struct Whale *)malloc(GJE_CONFIG.populationSize * sizeof(struct Whale));
+    if (ocean.whales == NULL) {
+        fprintf(stderr, "Ocean malloc failed, %s\n", strerror(errno));
+        return;
+    }
+
+    ocean.lenWhales = GJE_CONFIG.populationSize;
+    ocean.globBestSeq = NULL;
+    ocean.lenGlobBestSeq = 0;
+    ocean.globBestObj = 1e9;
+    
+    // Seed the random number generator
+    srand(time(NULL));
+
+    for (int i = 0; i < ocean.lenWhales; i++) {
+        ocean.whales[i].pos = (double *)malloc(nodeArrLen * sizeof(double));
+        ocean.whales[i].seq = (int *)malloc(nodeArrLen * sizeof(int));
+        if (ocean.whales[i].pos == NULL || ocean.whales[i].seq == NULL) {
+            fprintf(stderr, "Whale malloc failed, %s\n", strerror(errno));
+            return;   
+        }
+        ocean.whales[i].lenPos = nodeArrLen;
+
+        // Random position of whale
+        for (int j = 0; j < nodeArrLen; j++) {
+            ocean.whales[i].pos[j] = ((double)rand() / RAND_MAX) * 20.0 - 10.0;
+            ocean.whales[i].seq[j] = j;
+        }
+
+        // Sort the sequence array wrt the values of pos array
+        tempSeqGenerator = ocean.whales[i].pos;
+        qsort(ocean.whales[i].seq, nodeArrLen, sizeof(int), compareDoubles);
+        
+        // Change the pos and seq array to comply with the toposort
+        // toposort for GJE and LU is simply the integral order
+        // Just check if all the dependencies of a node appear before it or not sequentially
+        // If not, swap with the last one
+        topoSortSeq(i);
+    }
+
+    tempSeqGenerator = NULL;
+}
+
+void topoSortSeq(int ind) {
+    int *visitedArr = (int *)malloc(nodeArrLen * sizeof(int));
+    if (visitedArr == NULL) {
+        fprintf(stderr, "Whale vistedArr malloc failed, %s\n", strerror(errno));
+        return;  
+    }
+    int tempSeq;
+    double tempPos;
+    for (int i = 0; i < nodeArrLen; i++) visitedArr[i] = (nodeArrLen + 100);
+    int iter = 0, childrenResolved, minChain;
+    while (iter < nodeArrLen) {
+        if (nodeArr[ocean.whales[ind].seq[iter]].childrenLen == 0) {
+            visitedArr[ocean.whales[ind].seq[iter]] = iter;
+            iter++;
+            continue;
+        }
+        
+        childrenResolved = 0;
+        while (!childrenResolved) {
+            // This just finds the first occurence of a child
+            minChain = nodeArrLen + 100;
+            for (int i = 0; i < nodeArr[ocean.whales[ind].seq[iter]].childrenLen; i++)
+                minChain = (visitedArr[nodeArr[ocean.whales[ind].seq[iter]].children[i]->index] < minChain) ? visitedArr[nodeArr[ocean.whales[ind].seq[iter]].children[i]->index] : minChain;
+
+            if (minChain < iter)
+                childrenResolved = 0;
+            else
+                childrenResolved = 1;
+            if (!childrenResolved) {
+                tempSeq = ocean.whales[ind].seq[iter];
+                ocean.whales[ind].seq[iter] = ocean.whales[ind].seq[minChain];
+                ocean.whales[ind].seq[minChain] = tempSeq;
+                tempPos = ocean.whales[ind].pos[ocean.whales[ind].seq[iter]];
+                ocean.whales[ind].pos[ocean.whales[ind].seq[iter]] = ocean.whales[ind].pos[ocean.whales[ind].seq[minChain]];
+                ocean.whales[ind].pos[ocean.whales[ind].seq[minChain]] = tempPos;
+                visitedArr[ocean.whales[ind].seq[minChain]] = minChain;
+                visitedArr[ocean.whales[ind].seq[iter]] = (nodeArrLen + 100);
+            }
+        }
+        visitedArr[ocean.whales[ind].seq[iter]] = iter;
+        iter++;
+    }
+}
+
 void printDAG() {
     for (int i = 0; i < nodeArrLen; i++) {
         printf("Node %d:\nDeps:\n", nodeArr[i].index);
@@ -80,6 +169,30 @@ void printDAG() {
     }
 }
 
+void printWhales() {
+    printf("Whales:\n\n");
+    for (int i = 0; i < ocean.lenWhales; i++) {
+        printf("Whale %d:\nPos Array:\n", i);
+        for (int j = 0; j < ocean.whales[i].lenPos; j++) {
+            printf("%f ", ocean.whales[i].pos[j]);
+        }
+        printf("\nSeq Array:\n");
+        for (int j = 0; j < ocean.whales[i].lenPos; j++) {
+            printf("%d ", ocean.whales[i].seq[j]);
+        }
+        printf("\n\n\n");
+    }
+}
+
+// Comparison function for qsort
+int compareDoubles(const void *a, const void *b) {
+    double diff = tempSeqGenerator[*(int*)a] - tempSeqGenerator[*(int*)b];
+    return (diff > 0) - (diff < 0);
+}
+
 int main() {
+    buildGJE(5);
+    initOcean();
+    printWhales();
     return 0;
 }
