@@ -57,6 +57,8 @@ void topoSortSeq(int ind);
 int *procState, *procAlloc, *nodeEndTime;
 void calcMakespan(int ind);
 
+void runOptimization();
+
 void printDAG();
 void printWhales();
 

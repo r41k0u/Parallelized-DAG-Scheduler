@@ -205,6 +205,10 @@ void calcMakespan(int ind) {
         ocean.whales[ind].obj = (procState[i] > ocean.whales[ind].obj) ? procState[i] : ocean.whales[ind].obj;
 }
 
+void runOptimization() {
+    
+}
+
 void printDAG() {
     for (int i = 0; i < nodeArrLen; i++) {
         printf("Node %d:\nDeps:\n", nodeArr[i].index);
