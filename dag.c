@@ -79,7 +79,23 @@ void initOcean() {
     ocean.lenWhales = GJE_CONFIG.populationSize;
     ocean.globBestSeq = NULL;
     ocean.lenGlobBestSeq = 0;
-    ocean.globBestObj = 1e9;
+    ocean.globBestObj = INIT_VAL;
+
+    procState = (int *)malloc(GJE_CONFIG.populationSize * sizeof(int));
+    if (procState == NULL) {
+        fprintf(stderr, "procState malloc failed, %s\n", strerror(errno));
+        return;
+    }
+    procAlloc = (int *)malloc(nodeArrLen * sizeof(int));
+    if (procAlloc == NULL) {
+        fprintf(stderr, "procAlloc malloc failed, %s\n", strerror(errno));
+        return;
+    }
+    nodeEndTime = (int *)malloc(nodeArrLen * sizeof(int));
+    if (nodeEndTime == NULL) {
+        fprintf(stderr, "nodeEndTime malloc failed, %s\n", strerror(errno));
+        return;
+    }
     
     // Seed the random number generator
     srand(time(NULL));
@@ -108,6 +124,7 @@ void initOcean() {
         // Just check if all the dependencies of a node appear before it or not sequentially
         // If not, swap with the last one
         topoSortSeq(i);
+        calcMakespan(i);
     }
 
     tempSeqGenerator = NULL;
@@ -121,7 +138,7 @@ void topoSortSeq(int ind) {
     }
     int tempSeq;
     double tempPos;
-    for (int i = 0; i < nodeArrLen; i++) visitedArr[i] = (nodeArrLen + 100);
+    for (int i = 0; i < nodeArrLen; i++) visitedArr[i] = INIT_NODE;
     int iter = 0, childrenResolved, minChain;
     while (iter < nodeArrLen) {
         if (nodeArr[ocean.whales[ind].seq[iter]].childrenLen == 0) {
@@ -133,7 +150,7 @@ void topoSortSeq(int ind) {
         childrenResolved = 0;
         while (!childrenResolved) {
             // This just finds the first occurence of a child
-            minChain = nodeArrLen + 100;
+            minChain = INIT_NODE;
             for (int i = 0; i < nodeArr[ocean.whales[ind].seq[iter]].childrenLen; i++)
                 minChain = (visitedArr[nodeArr[ocean.whales[ind].seq[iter]].children[i]->index] < minChain) ? visitedArr[nodeArr[ocean.whales[ind].seq[iter]].children[i]->index] : minChain;
 
@@ -149,12 +166,43 @@ void topoSortSeq(int ind) {
                 ocean.whales[ind].pos[ocean.whales[ind].seq[iter]] = ocean.whales[ind].pos[ocean.whales[ind].seq[minChain]];
                 ocean.whales[ind].pos[ocean.whales[ind].seq[minChain]] = tempPos;
                 visitedArr[ocean.whales[ind].seq[minChain]] = minChain;
-                visitedArr[ocean.whales[ind].seq[iter]] = (nodeArrLen + 100);
+                visitedArr[ocean.whales[ind].seq[iter]] = INIT_NODE;
             }
         }
         visitedArr[ocean.whales[ind].seq[iter]] = iter;
         iter++;
     }
+}
+
+void calcMakespan(int ind) {
+    for (int i = 0; i < GJE_CONFIG.numProc; i++)
+        procState[i] = 0;
+    for (int i = 0; i < nodeArrLen; i++) {
+        procAlloc[ocean.whales[ind].seq[i]] = (i % GJE_CONFIG.numProc);
+        nodeEndTime[i] = 0;
+    }
+
+    int maxEndTime;
+    for (int i = 0; i < nodeArrLen; i++) {
+        if (nodeArr[ocean.whales[ind].seq[i]].depsLen == 0) {
+            procState[procAlloc[ocean.whales[ind].seq[i]]] += GJE_CONFIG.nodeCost;
+            nodeEndTime[ocean.whales[ind].seq[i]] = procState[procAlloc[ocean.whales[ind].seq[i]]];
+            continue;
+        }
+
+        maxEndTime = procState[procAlloc[ocean.whales[ind].seq[i]]];
+        for (int j = 0; j < nodeArr[ocean.whales[ind].seq[i]].depsLen; j++) {
+            if (procAlloc[ocean.whales[ind].seq[i]] != procAlloc[nodeArr[ocean.whales[ind].seq[i]].deps[j]->index])
+                maxEndTime = ((nodeEndTime[nodeArr[ocean.whales[ind].seq[i]].deps[j]->index] + GJE_CONFIG.commCost) > maxEndTime) ? (nodeEndTime[nodeArr[ocean.whales[ind].seq[i]].deps[j]->index] + GJE_CONFIG.commCost) : maxEndTime;
+        }
+
+        procState[procAlloc[ocean.whales[ind].seq[i]]] = (maxEndTime + GJE_CONFIG.nodeCost);
+        nodeEndTime[ocean.whales[ind].seq[i]] = procState[procAlloc[ocean.whales[ind].seq[i]]];
+    }
+
+    ocean.whales[ind].obj = procState[0];
+    for (int i = 0; i < GJE_CONFIG.numProc; i++)
+        ocean.whales[ind].obj = (procState[i] > ocean.whales[ind].obj) ? procState[i] : ocean.whales[ind].obj;
 }
 
 void printDAG() {
@@ -180,7 +228,7 @@ void printWhales() {
         for (int j = 0; j < ocean.whales[i].lenPos; j++) {
             printf("%d ", ocean.whales[i].seq[j]);
         }
-        printf("\n\n\n");
+        printf("\nObj: %d\n\n\n", ocean.whales[i].obj);
     }
 }
 

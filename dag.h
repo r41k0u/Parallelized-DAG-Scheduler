@@ -5,6 +5,9 @@
 #include <math.h>
 #include <time.h>
 
+#define INIT_VAL 1e9
+#define INIT_NODE (nodeArrLen + 100)
+
 struct Node {
     struct Node **deps;
     int depsLen;
@@ -50,6 +53,10 @@ void buildGJE(int topLevel);
 void buildLU(int topLevel);
 void initOcean();
 void topoSortSeq(int ind);
+
+int *procState, *procAlloc, *nodeEndTime;
+void calcMakespan(int ind);
+
 void printDAG();
 void printWhales();
 
