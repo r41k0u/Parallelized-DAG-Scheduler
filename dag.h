@@ -4,9 +4,11 @@
 #include <errno.h>
 #include <math.h>
 #include <time.h>
+#include <omp.h>
 
 #define INIT_VAL 1e9
 #define INIT_NODE (nodeArrLen + 100)
+#define M_PI 3.14159265358979323846
 
 struct Node {
     struct Node **deps;
@@ -46,7 +48,7 @@ int nodeArrLen = 0;
 
 struct Ocean ocean;
 
-const struct DAGConfig GJE_CONFIG = {40, 100, 4, 30, 50};
+const struct DAGConfig GJE_CONFIG = {40, 100, 4, 72, 50};
 
 void buildNodes(int len);
 void buildGJE(int topLevel);

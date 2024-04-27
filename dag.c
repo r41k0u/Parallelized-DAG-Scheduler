@@ -8,6 +8,7 @@ void buildNodes(int len) {
         return;
     }
 
+    #pragma omp parallel for num_threads(8)
     for (int i = 0; i < len; i++) {
         nodeArr[i].index = i;
         nodeArr[i].childrenLen = nodeArr[i].depsLen = 0;
@@ -64,8 +65,8 @@ void buildGJE(int topLevel) {
 
 void buildLU(int topLevel) {
     buildNodes((topLevel * (topLevel + 3)) / 2);
-
-    // screw it I will write this later
+    int prefix;
+    buildGJE(topLevel);
 }
 
 void initOcean() {
@@ -110,6 +111,7 @@ void initOcean() {
         ocean.whales[i].lenPos = nodeArrLen;
 
         // Random position of whale
+        #pragma omp parallel for num_threads(8)
         for (int j = 0; j < nodeArrLen; j++) {
             ocean.whales[i].pos[j] = ((double)rand() / RAND_MAX) * 20.0 - 10.0;
             ocean.whales[i].seq[j] = j;
@@ -177,6 +179,8 @@ void topoSortSeq(int ind) {
 void calcMakespan(int ind) {
     for (int i = 0; i < GJE_CONFIG.numProc; i++)
         procState[i] = 0;
+    
+    #pragma omp parallel for num_threads(8)
     for (int i = 0; i < nodeArrLen; i++) {
         procAlloc[ocean.whales[ind].seq[i]] = (i % GJE_CONFIG.numProc);
         nodeEndTime[i] = 0;
@@ -206,7 +210,63 @@ void calcMakespan(int ind) {
 }
 
 void runOptimization() {
-    
+    int best_ind = 0, best_obj = INIT_VAL, rand_whale;
+    double a, A, C, D, l;
+
+    for (int j = 0; j < ocean.lenWhales; j++) {
+        if (ocean.whales[j].obj < best_obj) {
+            best_obj = ocean.whales[j].obj;
+            best_ind = j;
+        }
+    }
+
+    ocean.globBestObj = best_obj;
+
+    for (int i = 0; i < GJE_CONFIG.iterarions; i++) {
+        a = (2 - (2 * ((i + 1) / GJE_CONFIG.iterarions)));
+        
+        for (int j = 0; j < ocean.lenWhales; j++) {
+            tempSeqGenerator = NULL;
+            A = ((2 * a * ((double)rand() / RAND_MAX)) - a);
+            C = (2 * ((double)rand() / RAND_MAX));
+            if (((double)rand() / RAND_MAX) < 0.5) {
+                #pragma omp parallel for num_threads(8)
+                for (int k = 0; k < ocean.whales[j].lenPos; k++) {
+                    if (fabs(A) < 1) {
+                        // Encircling Prey
+                        D = fabs((C * ocean.whales[best_ind].pos[k]) - ocean.whales[j].pos[k]);
+                        ocean.whales[j].pos[k] = (ocean.whales[best_ind].pos[k] - (A * D));
+                    } else {
+                        // Exploration Phase
+                        rand_whale = (rand() % ocean.lenWhales);
+                        D = fabs((C * ocean.whales[rand_whale].pos[k]) - ocean.whales[j].pos[k]);
+                        ocean.whales[j].pos[k] = (ocean.whales[rand_whale].pos[k] - (A * D));
+                    }
+                }
+            } else {
+                // Bubble-Net Attack Phase
+                l = ((((double)rand() / RAND_MAX) * 2.0) - 1.0);
+                #pragma omp parallel for num_threads(8)
+                for (int k = 0; k < ocean.whales[j].lenPos; k++) {
+                    D = fabs(ocean.whales[best_ind].pos[k] - ocean.whales[j].pos[k]);
+                    ocean.whales[j].pos[k] = ((D * exp(l) * cos(2 * M_PI * l)) + ocean.whales[best_ind].pos[k]);
+                }
+            }
+            tempSeqGenerator = ocean.whales[j].pos;
+            qsort(ocean.whales[j].seq, nodeArrLen, sizeof(int), compareDoubles);
+            topoSortSeq(j);
+            calcMakespan(j);
+
+            best_obj = INIT_VAL, best_ind = 0;
+            for (int j = 0; j < ocean.lenWhales; j++) {
+                if (ocean.whales[j].obj < best_obj) {
+                    best_obj = ocean.whales[j].obj;
+                    best_ind = j;
+                }
+            }
+            ocean.globBestObj = (best_obj > ocean.globBestObj) ? best_obj : ocean.globBestObj;
+        }
+    }
 }
 
 void printDAG() {
@@ -243,8 +303,11 @@ int compareDoubles(const void *a, const void *b) {
 }
 
 int main() {
-    buildGJE(5);
+    clock_t start_time = clock(), end_time;
+    buildGJE(8);
     initOcean();
-    printWhales();
+    runOptimization();
+    end_time = clock();
+    printf("%d\nTime Taken: %.6lf seconds\n", ocean.globBestObj, ((double)(end_time - start_time)) / CLOCKS_PER_SEC);
     return 0;
 }
